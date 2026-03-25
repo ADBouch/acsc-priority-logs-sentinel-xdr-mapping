@@ -369,22 +369,97 @@ OT logging requires specialised collectors due to vendor-specific protocols and 
 
 ## Coverage Summary Matrix
 
-| # | ACSC Priority Log Category | Microsoft 1P Coverage | 3P Solutions Available | OOTB Detection Rules | Coverage Level |
-|---|---|---|---|---|---|
-| 1 | EDR Logs | **Full** (MDE/XDR) | CrowdStrike, SentinelOne, Carbon Black, Sophos, Trend Micro, ESET, Symantec, WithSecure | 50+ | ██████████ 100% |
-| 2 | Network Device Logs | **Partial** (Azure Firewall, NSG, WAF) | Palo Alto, Fortinet, Check Point, Cisco, SonicWall, Zscaler, WatchGuard | 30+ per vendor | ████████░░ 80% |
-| 3 | Domain Controller Logs | **Full** (SecurityEvent + Defender for Identity) | Semperis DSP | 60+ | ██████████ 100% |
-| 4 | AD & Domain Service Security | **Full** (SecurityEvent + Defender for Identity) | Semperis DSP | 60+ | ██████████ 100% |
-| 5 | Windows Endpoint Logs | **Full** (SecurityEvent + MDE) | Sysmon, NXLog FIM | 50+ | ██████████ 100% |
-| 6 | Virtualisation System Logs | **Partial** (Azure Activity for Azure VMs) | VMware vCenter/ESXi, Citrix | 10+ | ██████░░░░ 60% |
-| 7 | OT Logging | **Good** (Defender for IoT) | Claroty, Nozomi, Dragos, Forescout, Radiflow | 20+ | ████████░░ 75% |
-| 8 | Cloud Platform Logging | **Full** (Azure/M365 native) + **Good** (AWS, GCP) | AWS connector, GCP connectors, Google Workspace | 80+ | █████████░ 95% |
-| 9 | Container Logs | **Full** (AKS native) | — | 20+ | ██████████ 100% |
-| 10 | Database Logs | **Good** (Azure SQL, PaaS DBs) | MongoDB Atlas, Oracle, PostgreSQL on-prem | 15+ | ████████░░ 80% |
-| 11 | MDM | **Good** (Intune + MDE Mobile) | Jamf, Zimperium, Lookout, BETTER Mobile | 10+ | ████████░░ 80% |
-| 12 | DNS Server Logs | **Full** (Windows DNS + MDE) | Infoblox | 15+ | ██████████ 100% |
-| 13 | Linux Endpoint Logs | **Good** (Syslog + MDE Linux) | NXLog LinuxAudit, Sysmon for Linux | 15+ | ████████░░ 85% |
-| 14 | macOS Endpoint Logs | **Good** (MDE macOS) | NXLog BSM, Jamf Protect | 10+ | ███████░░░ 75% |
+### Methodology
+
+Coverage is calculated per ACSC priority log category using this formula:
+
+$$\text{Coverage \%} = \frac{\text{Full} + (\text{Partial} \times 0.5)}{\text{Total Sub-requirements}} \times 100$$
+
+For each ACSC sub-requirement listed in the source guidance:
+- **Full** = A Microsoft Sentinel or XDR table collects this data with OOTB analytics rules
+- **Partial** = Data is collectible but has noted limitations: requires custom DCR, missing sub-fields the ACSC specifies, limited OOTB detections, or depends on non-default configuration
+- **Gap** = No connector or table available to collect this data
+
+Sub-requirements are counted from the ACSC guidance document — vendor alternatives (e.g., "Palo Alto PAN-OS" vs "Fortinet FortiGate") are **not** counted separately since they fulfil the same ACSC requirement ("Firewall logs").
+
+### Detailed Breakdown
+
+| # | ACSC Category | Sub-reqs | Full | Partial | Gap | Coverage | Bar |
+|---|---|---|---|---|---|---|---|
+| 1 | EDR Logs | 15 | 13 | 2 | 0 | **93%** | █████████░ |
+| 2 | Network Device Logs | 8 | 6 | 2 | 0 | **88%** | ████████░░ |
+| 3 | Domain Controller Logs | 14 | 11 | 3 | 0 | **89%** | █████████░ |
+| 4 | AD & Domain Service Security | 4 | 4 | 0 | 0 | **100%** | ██████████ |
+| 5 | Windows Endpoint Logs | 10 | 8 | 2 | 0 | **90%** | █████████░ |
+| 6 | Virtualisation System Logs | 5 | 2 | 3 | 0 | **70%** | ███████░░░ |
+| 7 | OT Logging | 6 | 4 | 2 | 0 | **83%** | ████████░░ |
+| 8 | Cloud Platform Logging | 17 | 16 | 1 | 0 | **97%** | ██████████ |
+| 9 | Container Logs | 5 | 5 | 0 | 0 | **100%** | ██████████ |
+| 10 | Database Logs | 7 | 4 | 3 | 0 | **79%** | ████████░░ |
+| 11 | MDM | 6 | 5 | 1 | 0 | **92%** | █████████░ |
+| 12 | DNS Server Logs | 4 | 4 | 0 | 0 | **100%** | ██████████ |
+| 13 | Linux Endpoint Logs | 6 | 4 | 2 | 0 | **83%** | ████████░░ |
+| 14 | macOS Endpoint Logs | 6 | 2 | 4 | 0 | **67%** | ██████░░░░ |
+| | **Totals** | **113** | **88** | **25** | **0** | **89%** | █████████░ |
+
+### Partial Coverage Notes
+
+The following sub-requirements scored **Partial** — these are the gaps to close:
+
+| # | Category | Sub-requirement | Why Partial |
+|---|---|---|---|
+| 1 | EDR | Browser History | MDE captures `BrowserLaunchedToOpenUrl` only — full browser history requires investigation package or web content filtering |
+| 1 | EDR | LNK/Shellbags/ShimCache/BAM | LNK file creation logged; deeper forensic artefacts (ShimCache, BAM, Shellbags) require Live Response investigation package collection |
+| 2 | Network | Router/Switch logs | Collected via generic Syslog/CEF — limited OOTB analytics rules; no structured parsing for vendor-specific event types |
+| 2 | Network | NetFlow | No native Sentinel connector — requires custom DCR via AMA or third-party collector (Corelight, Gigamon) |
+| 3 | DC | Federation Services | AD FS admin/audit Event IDs (307, 510, 1007, 1200, 1202) require custom Windows Event Forwarding; limited OOTB rules |
+| 3 | DC | LSASS protection | Event IDs 3033/3063 collected via SecurityEvent but limited OOTB analytics rules for LSA protection violations |
+| 3 | DC | LDAP Bind (2889) | Requires enabling Directory Services logging on DCs; limited OOTB detection rules |
+| 5 | Windows | Application Crashes | Event 1001 collected via Event table but limited OOTB analytics — crash correlation requires custom rules |
+| 5 | Windows | ESENT (ntds.dit) | Event 326 (ntds.dit mount) collected but only one specific OOTB rule; broader ESENT anomaly detection requires custom analytics |
+| 6 | Virtualisation | Non-Azure hypervisors | VMware vCenter/ESXi and Citrix require 3P Content Hub solutions; Hyper-V on-prem needs SecurityEvent on hosts with custom DCR |
+| 6 | Virtualisation | Audit log cleared | Covered for Azure VMs (AzureActivity) but requires 3P/custom for non-Azure hypervisors |
+| 6 | Virtualisation | Resource utilisation | Azure Monitor covers Azure VMs natively; non-Azure hypervisor resource metrics require custom Syslog or 3P collection |
+| 7 | OT | Config change monitoring | Defender for IoT covers supported protocols; proprietary ICS device config changes may need vendor-specific integration |
+| 7 | OT | Firmware update tracking | Coverage depends on device/protocol support in Defender for IoT sensor; some legacy devices not supported |
+| 8 | Cloud | Entra Connect | Provisioning logs are native; Connect server Event IDs (611, 650–657) require AMA on the Connect server with custom DCR |
+| 10 | Database | PostgreSQL (Azure) | Azure Diagnostics collects logs but limited security-specific OOTB rules |
+| 10 | Database | MySQL (Azure) | Azure Diagnostics collects logs but limited security-specific OOTB rules |
+| 10 | Database | PostgreSQL (on-prem) | Requires custom Syslog or 3P connector; limited OOTB analytics |
+| 11 | MDM | WiFi/network adapter events | Intune audit logs capture compliance but detailed per-connection WiFi/cellular logs are not available in SIEM-ingestible format |
+| 13 | Linux | File events (unauthorised access) | Syslog captures auditd SYSCALL denials; full file integrity monitoring requires MDE on Linux or dedicated FIM agent |
+| 13 | Linux | Recon/network events | Syslog catches some tool execution; complete coverage of reconnaissance tooling requires MDE agent on Linux |
+| 14 | macOS | MDM integration | Intune covers basics; full macOS endpoint management visibility requires Jamf Protect (3P) |
+| 14 | macOS | Keychain access | MDE macOS covers file/network/CLI but does not report Keychain access events |
+| 14 | macOS | App install/volume mount | MDE tracks some app events; volume mount events require custom OpenBSM audit configuration |
+| 14 | macOS | Deep BSM auditing | Full OpenBSM audit trail (Terminal commands, privilege escalation, SSH sessions) requires NXLog BSM (3P) beyond MDE coverage |
+
+---
+
+## Validation Checklist
+
+Run this KQL to get a count of all tables with data in your workspace and compare against the tables listed above:
+
+```kql
+search *
+| where TimeGenerated > ago(30d)
+| summarize Count=count(), LatestEvent=max(TimeGenerated) by $table
+| sort by Count desc
+```
+
+Then cross-reference with the ACSC priority categories:
+
+```kql
+// Quick health check: Do I have data for each ACSC category?
+let EDR = DeviceProcessEvents | where TimeGenerated > ago(1d) | count | extend Category="1-EDR";
+let FW = CommonSecurityLog | where TimeGenerated > ago(1d) | count | extend Category="2-Network";
+let DC = SecurityEvent | where TimeGenerated > ago(1d) | where EventID in (4768,4769,4776) | count | extend Category="3-DC";
+let WinEP = SecurityEvent | where TimeGenerated > ago(1d) | where EventID in (4688,4624,4625) | count | extend Category="5-WinEndpoint";
+let Cloud = SigninLogs | where TimeGenerated > ago(1d) | count | extend Category="8-Cloud";
+let DNS = DnsEvents | where TimeGenerated > ago(1d) | count | extend Category="12-DNS";
+union EDR, FW, DC, WinEP, Cloud, DNS
+| project Category, Count
+```
 
 ---
 
