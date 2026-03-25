@@ -1,0 +1,680 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# ACSC Priority Logs — Coverage & Posture Dashboard\n\n> Maps [ASD/ACSC Priority Logs for SIEM Ingestion](https://www.cyber.gov.au/business-government/detecting-responding-to-threats/event-logging/implementing-siem-soar-platforms/priority-logs-for-siem-ingestion-practitioner-guidance) guidance to your Microsoft Sentinel & Defender XDR telemetry.\n\n**What this workbook shows:**\n- Which ACSC log categories have active data flowing\n- Event volume and data size per table and category\n- Heatmap of coverage by ACSC priority\n- Retention posture and data freshness\n- Gap analysis — missing tables and silent connectors\n- Detection rule coverage per category"
+      },
+      "name": "text-title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "0a1b2c3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time Range",
+            "type": 4,
+            "isRequired": true,
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 86400000 },
+                { "durationMs": 259200000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 1209600000 },
+                { "durationMs": 2592000000 },
+                { "durationMs": 7776000000 }
+              ],
+              "allowCustom": true
+            },
+            "value": {
+              "durationMs": 2592000000
+            }
+          },
+          {
+            "id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+            "version": "KqlParameterItem/1.0",
+            "name": "selectedTab",
+            "type": 1,
+            "isRequired": false,
+            "isHiddenWhenLocked": true,
+            "value": "overview"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 11,
+      "content": {
+        "version": "LinkItem/1.0",
+        "style": "tabs",
+        "links": [
+          {
+            "id": "tab-overview",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Overview",
+            "subTarget": "overview",
+            "style": "link",
+            "preText": "",
+            "postText": ""
+          },
+          {
+            "id": "tab-heatmap",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Coverage Heatmap",
+            "subTarget": "heatmap",
+            "style": "link"
+          },
+          {
+            "id": "tab-volume",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Event Volume & Size",
+            "subTarget": "volume",
+            "style": "link"
+          },
+          {
+            "id": "tab-retention",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Retention & Freshness",
+            "subTarget": "retention",
+            "style": "link"
+          },
+          {
+            "id": "tab-gaps",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Gap Analysis",
+            "subTarget": "gaps",
+            "style": "link"
+          },
+          {
+            "id": "tab-detections",
+            "cellValue": "selectedTab",
+            "linkTarget": "parameter",
+            "linkLabel": "Detection Posture",
+            "subTarget": "detections",
+            "style": "link"
+          }
+        ]
+      },
+      "name": "tabs"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": 0,
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## Posture Summary\nKey metrics across all 14 ACSC priority log categories for the selected time range."
+            },
+            "name": "text-overview-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ACSCMapping = datatable(TableName:string, ACSCCategory:string, ACSCPriority:int)[\n\"DeviceProcessEvents\",\"1-EDR\",1,\n\"DeviceEvents\",\"1-EDR\",1,\n\"DeviceNetworkEvents\",\"1-EDR\",1,\n\"DeviceImageLoadEvents\",\"1-EDR\",1,\n\"DeviceFileEvents\",\"1-EDR\",1,\n\"DeviceRegistryEvents\",\"1-EDR\",1,\n\"DeviceInfo\",\"1-EDR\",1,\n\"DeviceLogonEvents\",\"1-EDR\",1,\n\"CommonSecurityLog\",\"2-Network\",2,\n\"AZFWNetworkRule\",\"2-Network\",2,\n\"AZFWApplicationRule\",\"2-Network\",2,\n\"AZFWThreatIntel\",\"2-Network\",2,\n\"WindowsFirewall\",\"2-Network\",2,\n\"EmailEvents\",\"2-Network\",2,\n\"EmailAttachmentInfo\",\"2-Network\",2,\n\"SecurityEvent\",\"3-DC\",3,\n\"WindowsEvent\",\"3-DC\",3,\n\"IdentityLogonEvents\",\"3-DC\",3,\n\"IdentityDirectoryEvents\",\"3-DC\",3,\n\"IdentityQueryEvents\",\"4-AD\",4,\n\"Event\",\"5-WinEndpoint\",5,\n\"AzureActivity\",\"6-Virtualisation\",6,\n\"SecurityAlert\",\"7-OT\",7,\n\"SigninLogs\",\"8-Cloud\",8,\n\"AADNonInteractiveUserSignInLogs\",\"8-Cloud\",8,\n\"AADManagedIdentitySignInLogs\",\"8-Cloud\",8,\n\"AADServicePrincipalSignInLogs\",\"8-Cloud\",8,\n\"AuditLogs\",\"8-Cloud\",8,\n\"ADFSSignInLogs\",\"8-Cloud\",8,\n\"AADProvisioningLogs\",\"8-Cloud\",8,\n\"AzureDiagnostics\",\"8-Cloud\",8,\n\"StorageBlobLogs\",\"8-Cloud\",8,\n\"OfficeActivity\",\"8-Cloud\",8,\n\"AWSCloudTrail\",\"8-Cloud\",8,\n\"ContainerLog\",\"9-Container\",9,\n\"ContainerLogV2\",\"9-Container\",9,\n\"KubeAuditLogs\",\"9-Container\",9,\n\"ContainerInventory\",\"9-Container\",9,\n\"DnsEvents\",\"12-DNS\",12,\n\"DnsInventory\",\"12-DNS\",12,\n\"Syslog\",\"13-Linux\",13,\n\"IntuneAuditLogs\",\"11-MDM\",11,\n\"IntuneOperationalLogs\",\"11-MDM\",11,\n\"IntuneDevices\",\"11-MDM\",11\n];\nlet TableData = Usage\n| where TimeGenerated {TimeRange}\n| where IsBillable == true\n| summarize SizeMB = sum(Quantity) by DataType;\nlet Calcs = TableData\n| join kind=inner ACSCMapping on $left.DataType == $right.TableName\n| summarize ActiveCategories = dcount(ACSCCategory), ActiveTables = dcount(TableName), TotalSizeMB = sum(SizeMB)\n| extend CoveragePercent = round(toreal(ActiveCategories) / 14.0 * 100, 1), TotalSizeGB = round(TotalSizeMB / 1024.0, 2);\nunion\n(Calcs | project Metric = \"Coverage\", Value = CoveragePercent, Detail = strcat(tostring(CoveragePercent), \"% of 14 categories\")),\n(Calcs | project Metric = \"Active Categories\", Value = toreal(ActiveCategories), Detail = strcat(tostring(ActiveCategories), \" / 14\")),\n(Calcs | project Metric = \"Active Tables\", Value = toreal(ActiveTables), Detail = strcat(tostring(ActiveTables), \" tables with data\")),\n(Calcs | project Metric = \"Data Ingested\", Value = TotalSizeGB, Detail = strcat(tostring(TotalSizeGB), \" GB billable\"))",
+              "size": 4,
+              "title": "ACSC Coverage At A Glance",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "tiles",
+              "tileSettings": {
+                "showBorder": true,
+                "titleContent": {
+                  "columnMatch": "Metric",
+                  "formatter": 1
+                },
+                "leftContent": {
+                  "columnMatch": "Value",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "auto"
+                  },
+                  "numberFormat": {
+                    "unit": 0,
+                    "options": {
+                      "style": "decimal",
+                      "maximumFractionDigits": 1
+                    }
+                  }
+                },
+                "secondaryContent": {
+                  "columnMatch": "Detail",
+                  "formatter": 1
+                }
+              }
+            },
+            "customWidth": "100",
+            "name": "query-overview-tiles"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ACSCMapping = datatable(TableName:string, ACSCCategory:string, ACSCPriority:int, CategoryLabel:string)[\n\"DeviceProcessEvents\",\"1-EDR\",1,\"1. EDR Logs\",\n\"DeviceEvents\",\"1-EDR\",1,\"1. EDR Logs\",\n\"DeviceNetworkEvents\",\"1-EDR\",1,\"1. EDR Logs\",\n\"DeviceImageLoadEvents\",\"1-EDR\",1,\"1. EDR Logs\",\n\"DeviceFileEvents\",\"1-EDR\",1,\"1. EDR Logs\",\n\"DeviceRegistryEvents\",\"1-EDR\",1,\"1. EDR Logs\",\n\"DeviceInfo\",\"1-EDR\",1,\"1. EDR Logs\",\n\"DeviceLogonEvents\",\"1-EDR\",1,\"1. EDR Logs\",\n\"CommonSecurityLog\",\"2-Network\",2,\"2. Network Device Logs\",\n\"AZFWNetworkRule\",\"2-Network\",2,\"2. Network Device Logs\",\n\"AZFWApplicationRule\",\"2-Network\",2,\"2. Network Device Logs\",\n\"AZFWThreatIntel\",\"2-Network\",2,\"2. Network Device Logs\",\n\"WindowsFirewall\",\"2-Network\",2,\"2. Network Device Logs\",\n\"EmailEvents\",\"2-Network\",2,\"2. Network Device Logs\",\n\"EmailAttachmentInfo\",\"2-Network\",2,\"2. Network Device Logs\",\n\"SecurityEvent\",\"3-DC\",3,\"3. Domain Controller Logs\",\n\"WindowsEvent\",\"3-DC\",3,\"3. Domain Controller Logs\",\n\"IdentityLogonEvents\",\"3-DC\",3,\"3. Domain Controller Logs\",\n\"IdentityDirectoryEvents\",\"3-DC\",3,\"3. Domain Controller Logs\",\n\"IdentityQueryEvents\",\"4-AD\",4,\"4. AD & Domain Service\",\n\"Event\",\"5-WinEndpoint\",5,\"5. Windows Endpoint Logs\",\n\"AzureActivity\",\"6-Virtualisation\",6,\"6. Virtualisation Logs\",\n\"SecurityAlert\",\"7-OT\",7,\"7. OT Logging\",\n\"SigninLogs\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"AADNonInteractiveUserSignInLogs\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"AADManagedIdentitySignInLogs\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"AADServicePrincipalSignInLogs\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"AuditLogs\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"ADFSSignInLogs\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"AADProvisioningLogs\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"AzureDiagnostics\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"StorageBlobLogs\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"OfficeActivity\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"AWSCloudTrail\",\"8-Cloud\",8,\"8. Cloud Platform Logging\",\n\"ContainerLog\",\"9-Container\",9,\"9. Container Logs\",\n\"ContainerLogV2\",\"9-Container\",9,\"9. Container Logs\",\n\"KubeAuditLogs\",\"9-Container\",9,\"9. Container Logs\",\n\"ContainerInventory\",\"9-Container\",9,\"9. Container Logs\",\n\"DnsEvents\",\"12-DNS\",12,\"12. DNS Server Logs\",\n\"DnsInventory\",\"12-DNS\",12,\"12. DNS Server Logs\",\n\"Syslog\",\"13-Linux\",13,\"13. Linux Endpoint Logs\",\n\"IntuneAuditLogs\",\"11-MDM\",11,\"11. MDM Logs\",\n\"IntuneOperationalLogs\",\"11-MDM\",11,\"11. MDM Logs\",\n\"IntuneDevices\",\"11-MDM\",11,\"11. MDM Logs\"\n];\nlet AllCategories = datatable(ACSCCategory:string, ACSCPriority:int, CategoryLabel:string, ExpectedTables:int)[\n\"1-EDR\",1,\"1. EDR Logs\",8,\n\"2-Network\",2,\"2. Network Device Logs\",7,\n\"3-DC\",3,\"3. Domain Controller Logs\",4,\n\"4-AD\",4,\"4. AD & Domain Service\",1,\n\"5-WinEndpoint\",5,\"5. Windows Endpoint Logs\",1,\n\"6-Virtualisation\",6,\"6. Virtualisation Logs\",1,\n\"7-OT\",7,\"7. OT Logging\",1,\n\"8-Cloud\",8,\"8. Cloud Platform Logging\",11,\n\"9-Container\",9,\"9. Container Logs\",4,\n\"10-Database\",10,\"10. Database Logs\",0,\n\"11-MDM\",11,\"11. MDM Logs\",3,\n\"12-DNS\",12,\"12. DNS Server Logs\",2,\n\"13-Linux\",13,\"13. Linux Endpoint Logs\",1,\n\"14-macOS\",14,\"14. macOS Endpoint Logs\",0\n];\nlet TableData = Usage\n| where TimeGenerated {TimeRange}\n| where IsBillable == true\n| summarize SizeMB = sum(Quantity) by DataType;\nlet Mapped = ACSCMapping\n| join kind=leftouter TableData on $left.TableName == $right.DataType\n| extend SizeMB = coalesce(SizeMB, 0.0)\n| summarize\n    TablesActive = dcountif(TableName, SizeMB > 0),\n    TotalSizeMB = round(sum(SizeMB), 2)\n    by ACSCCategory, ACSCPriority, CategoryLabel;\nAllCategories\n| join kind=leftouter Mapped on ACSCCategory\n| project\n    Priority = ACSCPriority,\n    Category = CategoryLabel,\n    Status = iff(coalesce(TablesActive, 0) > 0, \"Active\", \"No Data\"),\n    ActiveTables = coalesce(TablesActive, 0),\n    ExpectedTables,\n    SizeMB = coalesce(TotalSizeMB, 0.0),\n    SizeGB = round(coalesce(TotalSizeMB, 0.0) / 1024.0, 3)\n| sort by Priority asc",
+              "size": 0,
+              "title": "ACSC Category Status",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "icons",
+                      "thresholdsGrid": [
+                        { "operator": "==", "thresholdValue": "Active", "representation": "success", "text": "Active" },
+                        { "operator": "Default", "representation": "critical", "text": "No Data" }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "SizeMB",
+                    "formatter": 4,
+                    "formatOptions": { "palette": "blue" }
+                  },
+                  {
+                    "columnMatch": "SizeGB",
+                    "formatter": 4,
+                    "formatOptions": { "palette": "orange" }
+                  }
+                ],
+                "sortBy": [
+                  { "itemKey": "Priority", "sortOrder": 1 }
+                ]
+              }
+            },
+            "name": "query-overview-table"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "overview"
+      },
+      "name": "group-overview"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": 0,
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## ACSC Coverage Heatmap\n\nColour intensity represents **data volume (MB)** per category. Red rows indicate categories with **no data flowing** — these are your coverage gaps."
+            },
+            "name": "text-heatmap-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ACSCMapping = datatable(TableName:string, ACSCCategory:string, ACSCPriority:int)[\n\"DeviceProcessEvents\",\"1. EDR\",1,\n\"DeviceEvents\",\"1. EDR\",1,\n\"DeviceNetworkEvents\",\"1. EDR\",1,\n\"DeviceImageLoadEvents\",\"1. EDR\",1,\n\"DeviceFileEvents\",\"1. EDR\",1,\n\"DeviceRegistryEvents\",\"1. EDR\",1,\n\"DeviceInfo\",\"1. EDR\",1,\n\"DeviceLogonEvents\",\"1. EDR\",1,\n\"CommonSecurityLog\",\"2. Network\",2,\n\"AZFWNetworkRule\",\"2. Network\",2,\n\"AZFWApplicationRule\",\"2. Network\",2,\n\"AZFWThreatIntel\",\"2. Network\",2,\n\"WindowsFirewall\",\"2. Network\",2,\n\"EmailEvents\",\"2. Network\",2,\n\"EmailAttachmentInfo\",\"2. Network\",2,\n\"SecurityEvent\",\"3. DC\",3,\n\"WindowsEvent\",\"3. DC\",3,\n\"IdentityLogonEvents\",\"3. DC\",3,\n\"IdentityDirectoryEvents\",\"3. DC\",3,\n\"IdentityQueryEvents\",\"4. AD Security\",4,\n\"Event\",\"5. Win Endpoint\",5,\n\"AzureActivity\",\"6. Virtualisation\",6,\n\"SecurityAlert\",\"7. OT\",7,\n\"SigninLogs\",\"8. Cloud\",8,\n\"AADNonInteractiveUserSignInLogs\",\"8. Cloud\",8,\n\"AADManagedIdentitySignInLogs\",\"8. Cloud\",8,\n\"AADServicePrincipalSignInLogs\",\"8. Cloud\",8,\n\"AuditLogs\",\"8. Cloud\",8,\n\"ADFSSignInLogs\",\"8. Cloud\",8,\n\"AADProvisioningLogs\",\"8. Cloud\",8,\n\"AzureDiagnostics\",\"8. Cloud\",8,\n\"StorageBlobLogs\",\"8. Cloud\",8,\n\"OfficeActivity\",\"8. Cloud\",8,\n\"AWSCloudTrail\",\"8. Cloud\",8,\n\"ContainerLog\",\"9. Container\",9,\n\"ContainerLogV2\",\"9. Container\",9,\n\"KubeAuditLogs\",\"9. Container\",9,\n\"ContainerInventory\",\"9. Container\",9,\n\"DnsEvents\",\"12. DNS\",12,\n\"DnsInventory\",\"12. DNS\",12,\n\"Syslog\",\"13. Linux\",13,\n\"IntuneAuditLogs\",\"11. MDM\",11,\n\"IntuneOperationalLogs\",\"11. MDM\",11,\n\"IntuneDevices\",\"11. MDM\",11\n];\nlet AllCategories = datatable(ACSCCategory:string, ACSCPriority:int, ExpectedTables:int)[\n\"1. EDR\",1,8,\n\"2. Network\",2,7,\n\"3. DC\",3,4,\n\"4. AD Security\",4,1,\n\"5. Win Endpoint\",5,1,\n\"6. Virtualisation\",6,1,\n\"7. OT\",7,1,\n\"8. Cloud\",8,11,\n\"9. Container\",9,4,\n\"10. Database\",10,0,\n\"11. MDM\",11,3,\n\"12. DNS\",12,2,\n\"13. Linux\",13,1,\n\"14. macOS\",14,0\n];\nlet TableData = Usage\n| where TimeGenerated {TimeRange}\n| where IsBillable == true\n| summarize SizeMB = sum(Quantity) by DataType;\nlet Mapped = ACSCMapping\n| join kind=leftouter TableData on $left.TableName == $right.DataType\n| extend SizeMB = coalesce(SizeMB, 0.0)\n| summarize\n    ActiveTables = dcountif(TableName, SizeMB > 0),\n    TotalTables = dcount(TableName),\n    SizeMB = round(sum(SizeMB), 1)\n    by ACSCCategory, ACSCPriority;\nAllCategories\n| join kind=leftouter Mapped on ACSCCategory\n| extend\n    ActiveTables = coalesce(ActiveTables, 0),\n    SizeMB = coalesce(SizeMB, 0.0),\n    Status = case(\n        coalesce(ActiveTables, 0) == 0, \"No Data\",\n        coalesce(ActiveTables, 0) < ExpectedTables, \"Partial\",\n        \"Full\"\n    )\n| project\n    Category = ACSCCategory,\n    Priority = ACSCPriority,\n    ExpectedTables,\n    ActiveTables,\n    ['Data Volume (MB)'] = SizeMB,\n    Status\n| sort by Priority asc",
+              "size": 0,
+              "title": "Coverage by ACSC Category",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Status",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "colors",
+                      "thresholdsGrid": [
+                        { "operator": "==", "thresholdValue": "Full", "representation": "green", "text": "Full" },
+                        { "operator": "==", "thresholdValue": "Partial", "representation": "yellow", "text": "Partial" },
+                        { "operator": "Default", "representation": "redBright", "text": "No Data" }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Data Volume",
+                    "formatter": 8,
+                    "formatOptions": { "palette": "blue" }
+                  },
+                  {
+                    "columnMatch": "ActiveTables",
+                    "formatter": 8,
+                    "formatOptions": { "palette": "greenDark" }
+                  }
+                ]
+              }
+            },
+            "name": "query-heatmap-table"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ACSCMapping = datatable(TableName:string, ACSCCategory:string)[\n\"DeviceProcessEvents\",\"1. EDR\",\n\"DeviceEvents\",\"1. EDR\",\n\"DeviceNetworkEvents\",\"1. EDR\",\n\"DeviceFileEvents\",\"1. EDR\",\n\"DeviceRegistryEvents\",\"1. EDR\",\n\"DeviceInfo\",\"1. EDR\",\n\"CommonSecurityLog\",\"2. Network\",\n\"AZFWNetworkRule\",\"2. Network\",\n\"WindowsFirewall\",\"2. Network\",\n\"EmailEvents\",\"2. Network\",\n\"SecurityEvent\",\"3. DC\",\n\"IdentityLogonEvents\",\"3. DC\",\n\"IdentityDirectoryEvents\",\"3. DC\",\n\"Event\",\"5. Win EP\",\n\"SigninLogs\",\"8. Cloud\",\n\"AuditLogs\",\"8. Cloud\",\n\"OfficeActivity\",\"8. Cloud\",\n\"AzureActivity\",\"6. Virt\",\n\"Syslog\",\"13. Linux\",\n\"DnsEvents\",\"12. DNS\",\n\"IntuneAuditLogs\",\"11. MDM\",\n\"ContainerLog\",\"9. Container\",\n\"KubeAuditLogs\",\"9. Container\"\n];\nUsage\n| where TimeGenerated {TimeRange}\n| where IsBillable == true\n| join kind=inner ACSCMapping on $left.DataType == $right.TableName\n| summarize DailyMB = sum(Quantity) by ACSCCategory, bin(TimeGenerated, 1d)\n| render timechart with (title=\"Daily Ingestion by ACSC Category\")",
+              "size": 0,
+              "title": "Daily Ingestion Volume by ACSC Category (MB)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "timechart"
+            },
+            "name": "query-heatmap-trend"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "heatmap"
+      },
+      "name": "group-heatmap"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": 0,
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## Event Volume & Data Size\n\nDetailed breakdown of every table mapped to ACSC categories — billable data size and average daily volume. Use this to estimate monthly costs and identify high-volume tables for log tier optimization."
+            },
+            "name": "text-volume-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ACSCMapping = datatable(TableName:string, ACSCCategory:string, ACSCPriority:int)[\n\"DeviceProcessEvents\",\"1. EDR\",1,\n\"DeviceEvents\",\"1. EDR\",1,\n\"DeviceNetworkEvents\",\"1. EDR\",1,\n\"DeviceImageLoadEvents\",\"1. EDR\",1,\n\"DeviceFileEvents\",\"1. EDR\",1,\n\"DeviceRegistryEvents\",\"1. EDR\",1,\n\"DeviceInfo\",\"1. EDR\",1,\n\"DeviceLogonEvents\",\"1. EDR\",1,\n\"CommonSecurityLog\",\"2. Network\",2,\n\"AZFWNetworkRule\",\"2. Network\",2,\n\"AZFWApplicationRule\",\"2. Network\",2,\n\"AZFWThreatIntel\",\"2. Network\",2,\n\"WindowsFirewall\",\"2. Network\",2,\n\"EmailEvents\",\"2. Network\",2,\n\"EmailAttachmentInfo\",\"2. Network\",2,\n\"EmailUrlInfo\",\"2. Network\",2,\n\"SecurityEvent\",\"3. DC\",3,\n\"WindowsEvent\",\"3. DC\",3,\n\"IdentityLogonEvents\",\"3. DC\",3,\n\"IdentityDirectoryEvents\",\"3. DC\",3,\n\"IdentityQueryEvents\",\"4. AD\",4,\n\"Event\",\"5. Win Endpoint\",5,\n\"AzureActivity\",\"6. Virtualisation\",6,\n\"SecurityAlert\",\"7. OT\",7,\n\"SigninLogs\",\"8. Cloud\",8,\n\"AADNonInteractiveUserSignInLogs\",\"8. Cloud\",8,\n\"AADManagedIdentitySignInLogs\",\"8. Cloud\",8,\n\"AADServicePrincipalSignInLogs\",\"8. Cloud\",8,\n\"AuditLogs\",\"8. Cloud\",8,\n\"ADFSSignInLogs\",\"8. Cloud\",8,\n\"AADProvisioningLogs\",\"8. Cloud\",8,\n\"AzureDiagnostics\",\"8. Cloud\",8,\n\"StorageBlobLogs\",\"8. Cloud\",8,\n\"OfficeActivity\",\"8. Cloud\",8,\n\"AWSCloudTrail\",\"8. Cloud\",8,\n\"ContainerLog\",\"9. Container\",9,\n\"ContainerLogV2\",\"9. Container\",9,\n\"KubeAuditLogs\",\"9. Container\",9,\n\"ContainerInventory\",\"9. Container\",9,\n\"DnsEvents\",\"12. DNS\",12,\n\"DnsInventory\",\"12. DNS\",12,\n\"Syslog\",\"13. Linux\",13,\n\"IntuneAuditLogs\",\"11. MDM\",11,\n\"IntuneOperationalLogs\",\"11. MDM\",11,\n\"IntuneDevices\",\"11. MDM\",11\n];\nUsage\n| where TimeGenerated {TimeRange}\n| where IsBillable == true\n| summarize\n    TotalSizeMB = round(sum(Quantity), 2),\n    DaysWithData = dcount(bin(TimeGenerated, 1d))\n    by DataType\n| join kind=inner ACSCMapping on $left.DataType == $right.TableName\n| extend\n    SizeGB = round(TotalSizeMB / 1024.0, 3),\n    AvgDailyMB = round(TotalSizeMB / toreal(max_of(DaysWithData, 1)), 2),\n    EstMonthlyGB = round((TotalSizeMB / toreal(max_of(DaysWithData, 1)) * 30.0) / 1024.0, 2)\n| project\n    ['ACSC Category'] = ACSCCategory,\n    Priority = ACSCPriority,\n    Table = DataType,\n    ['Total (MB)'] = TotalSizeMB,\n    ['Total (GB)'] = SizeGB,\n    ['Days Reporting'] = DaysWithData,\n    ['Avg Daily (MB)'] = AvgDailyMB,\n    ['Est Monthly (GB)'] = EstMonthlyGB\n| sort by Priority asc, ['Total (MB)'] desc",
+              "size": 0,
+              "title": "Table-Level Volume & Cost Estimate",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Total \\(MB\\)",
+                    "formatter": 4,
+                    "formatOptions": { "palette": "blue" }
+                  },
+                  {
+                    "columnMatch": "Avg Daily",
+                    "formatter": 4,
+                    "formatOptions": { "palette": "turquoise" }
+                  },
+                  {
+                    "columnMatch": "Est Monthly",
+                    "formatter": 4,
+                    "formatOptions": { "palette": "orange" }
+                  }
+                ]
+              }
+            },
+            "name": "query-volume-table"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "Usage\n| where TimeGenerated {TimeRange}\n| where IsBillable == true\n| summarize SizeMB = round(sum(Quantity), 2) by DataType\n| top 20 by SizeMB desc\n| project Table = DataType, ['Size (MB)'] = SizeMB",
+              "size": 0,
+              "title": "Top 20 Tables — Data Volume (MB)",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "barchart",
+              "chartSettings": {
+                "xAxis": "Table",
+                "yAxis": [ "Size (MB)" ],
+                "seriesLabelSettings": [
+                  { "seriesName": "Size (MB)", "label": "Size (MB)", "color": "blue" }
+                ]
+              }
+            },
+            "name": "query-volume-bar"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "Usage\n| where TimeGenerated {TimeRange}\n| summarize SizeMB = round(sum(Quantity), 2) by IsBillable\n| extend Label = iff(IsBillable, \"Billable\", \"Non-Billable\")\n| project Label, ['Size (MB)'] = SizeMB",
+              "size": 3,
+              "title": "Billable vs Non-Billable Data",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "piechart"
+            },
+            "customWidth": "50",
+            "name": "query-volume-pie"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ACSCMapping = datatable(TableName:string, ACSCCategory:string)[\n\"DeviceProcessEvents\",\"1. EDR\",\n\"DeviceEvents\",\"1. EDR\",\n\"DeviceNetworkEvents\",\"1. EDR\",\n\"DeviceFileEvents\",\"1. EDR\",\n\"DeviceRegistryEvents\",\"1. EDR\",\n\"CommonSecurityLog\",\"2. Network\",\n\"EmailEvents\",\"2. Network\",\n\"SecurityEvent\",\"3. DC\",\n\"IdentityLogonEvents\",\"3. DC\",\n\"Event\",\"5. Win Endpoint\",\n\"SigninLogs\",\"8. Cloud\",\n\"AuditLogs\",\"8. Cloud\",\n\"OfficeActivity\",\"8. Cloud\",\n\"AzureActivity\",\"6. Virtualisation\",\n\"Syslog\",\"13. Linux\",\n\"DnsEvents\",\"12. DNS\",\n\"IntuneAuditLogs\",\"11. MDM\",\n\"ContainerLog\",\"9. Container\"\n];\nUsage\n| where TimeGenerated {TimeRange}\n| where IsBillable == true\n| join kind=inner ACSCMapping on $left.DataType == $right.TableName\n| summarize SizeMB = round(sum(Quantity), 1) by ACSCCategory\n| sort by SizeMB desc\n| project Category = ACSCCategory, ['Size (MB)'] = SizeMB",
+              "size": 3,
+              "title": "Data Volume by ACSC Category",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "piechart"
+            },
+            "customWidth": "50",
+            "name": "query-volume-category-pie"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "volume"
+      },
+      "name": "group-volume"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": 0,
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## Retention & Data Freshness\n\nAssesses how recently each ACSC-mapped table received data and flags tables that may have gone silent. Also compares effective retention against ACSC recommended minimums.\n\n**ACSC Retention Guidance:**\n- Priority 1-5: **18 months** (547 days)\n- Priority 6-14: **12 months** (365 days)\n\n> Use Sentinel **log tiers** — Analytics tier for high-frequency tables, Auxiliary/Basic tier for high-volume low-alert tables to reduce cost while maintaining retention."
+            },
+            "name": "text-retention-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ACSCMapping = datatable(TableName:string, ACSCCategory:string, ACSCPriority:int)[\n\"DeviceProcessEvents\",\"1. EDR\",1,\n\"DeviceEvents\",\"1. EDR\",1,\n\"DeviceNetworkEvents\",\"1. EDR\",1,\n\"DeviceImageLoadEvents\",\"1. EDR\",1,\n\"DeviceFileEvents\",\"1. EDR\",1,\n\"DeviceRegistryEvents\",\"1. EDR\",1,\n\"DeviceInfo\",\"1. EDR\",1,\n\"DeviceLogonEvents\",\"1. EDR\",1,\n\"CommonSecurityLog\",\"2. Network\",2,\n\"AZFWNetworkRule\",\"2. Network\",2,\n\"WindowsFirewall\",\"2. Network\",2,\n\"EmailEvents\",\"2. Network\",2,\n\"SecurityEvent\",\"3. DC\",3,\n\"WindowsEvent\",\"3. DC\",3,\n\"IdentityLogonEvents\",\"3. DC\",3,\n\"IdentityDirectoryEvents\",\"3. DC\",3,\n\"IdentityQueryEvents\",\"4. AD\",4,\n\"Event\",\"5. Win Endpoint\",5,\n\"AzureActivity\",\"6. Virtualisation\",6,\n\"SecurityAlert\",\"7. OT\",7,\n\"SigninLogs\",\"8. Cloud\",8,\n\"AADNonInteractiveUserSignInLogs\",\"8. Cloud\",8,\n\"AuditLogs\",\"8. Cloud\",8,\n\"AzureDiagnostics\",\"8. Cloud\",8,\n\"OfficeActivity\",\"8. Cloud\",8,\n\"AWSCloudTrail\",\"8. Cloud\",8,\n\"ContainerLog\",\"9. Container\",9,\n\"KubeAuditLogs\",\"9. Container\",9,\n\"DnsEvents\",\"12. DNS\",12,\n\"Syslog\",\"13. Linux\",13,\n\"IntuneAuditLogs\",\"11. MDM\",11\n];\nlet ACSCRetention = datatable(ACSCPriority:int, RecommendedDays:int)[\n1,547, 2,547, 3,547, 4,547, 5,547,\n6,365, 7,365, 8,365, 9,365, 10,365,\n11,365, 12,547, 13,547, 14,365\n];\nUsage\n| where TimeGenerated > ago(90d)\n| summarize\n    LastEvent = max(TimeGenerated),\n    FirstEvent = min(TimeGenerated),\n    TotalSizeMB = round(sum(Quantity), 2)\n    by DataType\n| join kind=inner ACSCMapping on $left.DataType == $right.TableName\n| join kind=inner ACSCRetention on ACSCPriority\n| extend\n    HoursSinceLast = round(datetime_diff('hour', now(), LastEvent), 1),\n    RetentionDays = datetime_diff('day', LastEvent, FirstEvent),\n    Freshness = case(\n        datetime_diff('hour', now(), LastEvent) <= 1, \"Live (< 1h)\",\n        datetime_diff('hour', now(), LastEvent) <= 24, \"Recent (< 24h)\",\n        datetime_diff('hour', now(), LastEvent) <= 168, \"Stale (1-7d)\",\n        \"Silent (> 7d)\"\n    ),\n    RetentionGap = max_of(RecommendedDays - datetime_diff('day', LastEvent, FirstEvent), 0)\n| project\n    ['ACSC Category'] = ACSCCategory,\n    Priority = ACSCPriority,\n    Table = DataType,\n    ['Last Event'] = LastEvent,\n    ['Hours Since Last'] = HoursSinceLast,\n    Freshness,\n    ['Retention (days)'] = RetentionDays,\n    ['ACSC Target (days)'] = RecommendedDays,\n    ['Gap (days)'] = RetentionGap,\n    ['Size (MB)'] = TotalSizeMB\n| sort by Priority asc, ['Hours Since Last'] desc",
+              "size": 0,
+              "title": "Data Freshness & Retention by Table",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Freshness",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "icons",
+                      "thresholdsGrid": [
+                        { "operator": "contains", "thresholdValue": "Live", "representation": "success", "text": "{0}" },
+                        { "operator": "contains", "thresholdValue": "Recent", "representation": "2", "text": "{0}" },
+                        { "operator": "contains", "thresholdValue": "Stale", "representation": "warning", "text": "{0}" },
+                        { "operator": "Default", "representation": "critical", "text": "{0}" }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Hours Since Last",
+                    "formatter": 8,
+                    "formatOptions": { "palette": "redGreen" }
+                  },
+                  {
+                    "columnMatch": "Gap \\(days\\)",
+                    "formatter": 8,
+                    "formatOptions": { "palette": "red" }
+                  },
+                  {
+                    "columnMatch": "Retention \\(days\\)",
+                    "formatter": 4,
+                    "formatOptions": { "palette": "purple" }
+                  }
+                ]
+              }
+            },
+            "name": "query-retention-freshness"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "retention"
+      },
+      "name": "group-retention"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": 0,
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## Gap Analysis\n\nIdentifies ACSC-mapped tables with **no data in the selected time range**, tables that have **gone silent**, and tables **not mapped** to any ACSC category."
+            },
+            "name": "text-gaps-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ACSCExpected = datatable(TableName:string, ACSCCategory:string, ACSCPriority:int, Connector:string)[\n\"DeviceProcessEvents\",\"1. EDR\",1,\"Microsoft Defender XDR\",\n\"DeviceEvents\",\"1. EDR\",1,\"Microsoft Defender XDR\",\n\"DeviceNetworkEvents\",\"1. EDR\",1,\"Microsoft Defender XDR\",\n\"DeviceImageLoadEvents\",\"1. EDR\",1,\"Microsoft Defender XDR\",\n\"DeviceFileEvents\",\"1. EDR\",1,\"Microsoft Defender XDR\",\n\"DeviceRegistryEvents\",\"1. EDR\",1,\"Microsoft Defender XDR\",\n\"DeviceInfo\",\"1. EDR\",1,\"Microsoft Defender XDR\",\n\"DeviceLogonEvents\",\"1. EDR\",1,\"Microsoft Defender XDR\",\n\"CommonSecurityLog\",\"2. Network\",2,\"CEF via AMA / Vendor connector\",\n\"AZFWNetworkRule\",\"2. Network\",2,\"Azure Firewall diagnostics\",\n\"AZFWApplicationRule\",\"2. Network\",2,\"Azure Firewall diagnostics\",\n\"AZFWThreatIntel\",\"2. Network\",2,\"Azure Firewall diagnostics\",\n\"WindowsFirewall\",\"2. Network\",2,\"Windows Firewall Content Hub\",\n\"EmailEvents\",\"2. Network\",2,\"Defender for Office 365\",\n\"EmailAttachmentInfo\",\"2. Network\",2,\"Defender for Office 365\",\n\"EmailUrlInfo\",\"2. Network\",2,\"Defender for Office 365\",\n\"SecurityEvent\",\"3. DC\",3,\"Windows Security Events via AMA\",\n\"WindowsEvent\",\"3. DC\",3,\"Windows Events via AMA\",\n\"IdentityLogonEvents\",\"3. DC\",3,\"Defender for Identity\",\n\"IdentityDirectoryEvents\",\"3. DC\",3,\"Defender for Identity\",\n\"IdentityQueryEvents\",\"4. AD\",4,\"Defender for Identity\",\n\"Event\",\"5. Win Endpoint\",5,\"Windows Events via AMA\",\n\"AzureActivity\",\"6. Virtualisation\",6,\"Azure Activity connector\",\n\"SecurityAlert\",\"7. OT\",7,\"Defender for IoT / Various\",\n\"SigninLogs\",\"8. Cloud\",8,\"Microsoft Entra ID\",\n\"AADNonInteractiveUserSignInLogs\",\"8. Cloud\",8,\"Microsoft Entra ID\",\n\"AADManagedIdentitySignInLogs\",\"8. Cloud\",8,\"Microsoft Entra ID\",\n\"AADServicePrincipalSignInLogs\",\"8. Cloud\",8,\"Microsoft Entra ID\",\n\"AuditLogs\",\"8. Cloud\",8,\"Microsoft Entra ID\",\n\"ADFSSignInLogs\",\"8. Cloud\",8,\"Microsoft Entra ID (ADFS)\",\n\"AADProvisioningLogs\",\"8. Cloud\",8,\"Microsoft Entra ID\",\n\"AzureDiagnostics\",\"8. Cloud\",8,\"Azure resource diagnostics\",\n\"StorageBlobLogs\",\"8. Cloud\",8,\"Azure Storage diagnostics\",\n\"OfficeActivity\",\"8. Cloud\",8,\"Microsoft 365 connector\",\n\"AWSCloudTrail\",\"8. Cloud\",8,\"Amazon Web Services S3\",\n\"ContainerLog\",\"9. Container\",9,\"Azure Monitor Containers\",\n\"ContainerLogV2\",\"9. Container\",9,\"Azure Monitor Containers\",\n\"KubeAuditLogs\",\"9. Container\",9,\"AKS diagnostics\",\n\"ContainerInventory\",\"9. Container\",9,\"Azure Monitor Containers\",\n\"DnsEvents\",\"12. DNS\",12,\"Windows Server DNS\",\n\"DnsInventory\",\"12. DNS\",12,\"Windows Server DNS\",\n\"Syslog\",\"13. Linux\",13,\"Syslog via AMA\",\n\"IntuneAuditLogs\",\"11. MDM\",11,\"Intune diagnostics\",\n\"IntuneOperationalLogs\",\"11. MDM\",11,\"Intune diagnostics\",\n\"IntuneDevices\",\"11. MDM\",11,\"Intune diagnostics\"\n];\nlet ActiveTables = Usage\n| where TimeGenerated {TimeRange}\n| where Quantity > 0\n| distinct DataType;\nACSCExpected\n| join kind=leftanti ActiveTables on $left.TableName == $right.DataType\n| project\n    ['Missing Table'] = TableName,\n    ['ACSC Category'] = ACSCCategory,\n    Priority = ACSCPriority,\n    ['Required Connector'] = Connector,\n    Action = \"Enable connector or check health\"\n| sort by Priority asc",
+              "size": 0,
+              "title": "Missing Tables — No Data in Selected Range",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Priority",
+                    "formatter": 8,
+                    "formatOptions": { "palette": "redGreen" }
+                  }
+                ]
+              }
+            },
+            "name": "query-gaps-missing"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "// Tables that had data in the last 30d but none in the last 24h\nUsage\n| where TimeGenerated > ago(30d)\n| where IsBillable == true\n| summarize\n    LastEvent = max(TimeGenerated),\n    Last24h = sumif(Quantity, TimeGenerated > ago(24h)),\n    Last7d = sumif(Quantity, TimeGenerated > ago(7d)),\n    Total30d = sum(Quantity)\n    by DataType\n| where Total30d > 0.1 and Last24h == 0\n| extend\n    DaysSilent = datetime_diff('day', now(), LastEvent),\n    Severity = case(\n        datetime_diff('day', now(), LastEvent) > 7, \"Critical (7d+)\",\n        datetime_diff('day', now(), LastEvent) > 3, \"Warning (3d+)\",\n        \"Monitor\"\n    )\n| project\n    Table = DataType,\n    ['Last Event'] = LastEvent,\n    ['Days Silent'] = DaysSilent,\n    ['Last 7d (MB)'] = round(Last7d, 2),\n    ['Total 30d (MB)'] = round(Total30d, 2),\n    Severity\n| sort by ['Days Silent'] desc",
+              "size": 0,
+              "title": "Silent Connectors — Tables That Stopped Sending Data",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Severity",
+                    "formatter": 18,
+                    "formatOptions": {
+                      "thresholdsOptions": "icons",
+                      "thresholdsGrid": [
+                        { "operator": "contains", "thresholdValue": "Critical", "representation": "critical", "text": "{0}" },
+                        { "operator": "contains", "thresholdValue": "Warning", "representation": "warning", "text": "{0}" },
+                        { "operator": "Default", "representation": "2", "text": "{0}" }
+                      ]
+                    }
+                  },
+                  {
+                    "columnMatch": "Days Silent",
+                    "formatter": 8,
+                    "formatOptions": { "palette": "redGreen" }
+                  }
+                ]
+              }
+            },
+            "name": "query-gaps-silent"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ACSCMapped = datatable(TableName:string)[\n\"DeviceProcessEvents\",\"DeviceEvents\",\"DeviceNetworkEvents\",\"DeviceImageLoadEvents\",\n\"DeviceFileEvents\",\"DeviceRegistryEvents\",\"DeviceInfo\",\"DeviceLogonEvents\",\n\"CommonSecurityLog\",\"AZFWNetworkRule\",\"AZFWApplicationRule\",\"AZFWThreatIntel\",\n\"WindowsFirewall\",\"AzureNetworkAnalytics_CL\",\"EmailEvents\",\"EmailAttachmentInfo\",\"EmailUrlInfo\",\n\"SecurityEvent\",\"WindowsEvent\",\"IdentityLogonEvents\",\"IdentityDirectoryEvents\",\"IdentityQueryEvents\",\n\"Event\",\"AzureActivity\",\"SecurityAlert\",\n\"SigninLogs\",\"AADNonInteractiveUserSignInLogs\",\"AADManagedIdentitySignInLogs\",\n\"AADServicePrincipalSignInLogs\",\"AuditLogs\",\"ADFSSignInLogs\",\"AADProvisioningLogs\",\n\"AzureDiagnostics\",\"StorageBlobLogs\",\"OfficeActivity\",\"AWSCloudTrail\",\n\"ContainerLog\",\"ContainerLogV2\",\"KubeAuditLogs\",\"ContainerInventory\",\n\"DnsEvents\",\"DnsInventory\",\"Syslog\",\n\"IntuneAuditLogs\",\"IntuneOperationalLogs\",\"IntuneDevices\",\n\"Usage\",\"Heartbeat\",\"Operation\"\n];\nUsage\n| where TimeGenerated {TimeRange}\n| where IsBillable == true\n| summarize SizeMB = round(sum(Quantity), 2) by DataType\n| join kind=leftanti ACSCMapped on $left.DataType == $right.TableName\n| where SizeMB > 1\n| sort by SizeMB desc\n| project\n    ['Unmapped Table'] = DataType,\n    ['Size (MB)'] = SizeMB,\n    Note = \"Not mapped to an ACSC category — review for supplementary coverage or log tier optimization\"",
+              "size": 0,
+              "title": "Unmapped Tables — Data Not Assigned to Any ACSC Category",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "Size",
+                    "formatter": 4,
+                    "formatOptions": { "palette": "blue" }
+                  }
+                ]
+              }
+            },
+            "name": "query-gaps-unmapped"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "gaps"
+      },
+      "name": "group-gaps"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": 0,
+        "items": [
+          {
+            "type": 1,
+            "content": {
+              "json": "## Detection Posture\n\nAnalytics rule coverage and alert generation mapped to ACSC categories. Shows which products are generating detections and identifies potential blind spots."
+            },
+            "name": "text-detections-header"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let ProductMapping = datatable(ProductName:string, ACSCCategory:string)[\n\"Microsoft Defender for Endpoint\",\"1. EDR\",\n\"Microsoft Defender Advanced Threat Protection\",\"1. EDR\",\n\"Microsoft Defender for Office 365\",\"2. Network\",\n\"Azure Firewall\",\"2. Network\",\n\"Microsoft Defender for Identity\",\"3. DC\",\n\"Azure Active Directory Identity Protection\",\"4. AD\",\n\"Microsoft Entra ID Protection\",\"4. AD\",\n\"Azure Security Center for IoT\",\"7. OT\",\n\"Microsoft Defender for IoT\",\"7. OT\",\n\"Microsoft Cloud App Security\",\"8. Cloud\",\n\"Microsoft Defender for Cloud Apps\",\"8. Cloud\",\n\"Microsoft Defender for Cloud\",\"8. Cloud\"\n];\nSecurityAlert\n| where TimeGenerated {TimeRange}\n| summarize\n    AlertCount = count(),\n    High = countif(AlertSeverity == \"High\"),\n    Medium = countif(AlertSeverity == \"Medium\"),\n    Low = countif(AlertSeverity == \"Low\"),\n    Info = countif(AlertSeverity == \"Informational\")\n    by ProductName\n| join kind=leftouter ProductMapping on ProductName\n| extend ACSCCategory = coalesce(ACSCCategory, \"Unmapped\")\n| project\n    Product = ProductName,\n    ['ACSC Category'] = ACSCCategory,\n    ['Total Alerts'] = AlertCount,\n    High,\n    Medium,\n    Low,\n    Info\n| sort by ['Total Alerts'] desc",
+              "size": 0,
+              "title": "Alert Volume by Product mapped to ACSC Category",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "table",
+              "gridSettings": {
+                "formatters": [
+                  {
+                    "columnMatch": "High",
+                    "formatter": 8,
+                    "formatOptions": { "palette": "red" }
+                  },
+                  {
+                    "columnMatch": "Medium",
+                    "formatter": 8,
+                    "formatOptions": { "palette": "orange" }
+                  },
+                  {
+                    "columnMatch": "Total Alerts",
+                    "formatter": 4,
+                    "formatOptions": { "palette": "blue" }
+                  }
+                ]
+              }
+            },
+            "name": "query-detections-alerts"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "SecurityAlert\n| where TimeGenerated {TimeRange}\n| summarize Count = count() by AlertSeverity, bin(TimeGenerated, 1d)\n| render timechart with (title=\"Alert Trend by Severity\")",
+              "size": 0,
+              "title": "Alert Trend by Severity",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "timechart",
+              "chartSettings": {
+                "seriesLabelSettings": [
+                  { "seriesName": "High", "color": "red" },
+                  { "seriesName": "Medium", "color": "orange" },
+                  { "seriesName": "Low", "color": "blue" },
+                  { "seriesName": "Informational", "color": "gray" }
+                ]
+              }
+            },
+            "name": "query-detections-trend"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "SecurityAlert\n| where TimeGenerated {TimeRange}\n| summarize Count = count() by AlertSeverity\n| project Severity = AlertSeverity, ['Alert Count'] = Count",
+              "size": 3,
+              "title": "Alerts by Severity",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "piechart",
+              "chartSettings": {
+                "seriesLabelSettings": [
+                  { "seriesName": "High", "color": "red" },
+                  { "seriesName": "Medium", "color": "orange" },
+                  { "seriesName": "Low", "color": "blue" },
+                  { "seriesName": "Informational", "color": "gray" }
+                ]
+              }
+            },
+            "customWidth": "50",
+            "name": "query-detections-severity-pie"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "SecurityAlert\n| where TimeGenerated {TimeRange}\n| summarize Count = count() by ProductName\n| project Product = ProductName, ['Alert Count'] = Count",
+              "size": 3,
+              "title": "Alerts by Product",
+              "queryType": 0,
+              "resourceType": "microsoft.operationalinsights/workspaces",
+              "visualization": "piechart"
+            },
+            "customWidth": "50",
+            "name": "query-detections-product-pie"
+          },
+          {
+            "type": 1,
+            "content": {
+              "json": "### Detection Coverage Recommendations\n\n| ACSC Category | Minimum Detection Rules | Key Detections to Verify |\n|---|---|---|\n| 1. EDR | 50+ | Process injection, living-off-the-land binaries, lateral movement, credential access |\n| 2. Network | 15+ per vendor | Beaconing, DNS tunnelling, TOR exit node, geo-impossible travel |\n| 3. DC | 30+ | Kerberoasting, DCSync, Golden Ticket, LDAP recon, account manipulation |\n| 4. AD | 10+ | SID History injection, trust creation, schema modification, DCShadow |\n| 5. Windows Endpoint | 20+ | PowerShell abuse, WMI persistence, scheduled task persistence, AMSI bypass |\n| 8. Cloud | 40+ | Impossible travel, consent grant, risky sign-in, privilege escalation |\n| 12. DNS | 10+ | DNS tunnelling, DGA domains, zone transfer anomaly, high-entropy subdomains |\n| 13. Linux | 10+ | SSH brute force, sudo abuse, cron persistence, reverse shell |\n\n> Use **SOC Optimization** in the Defender portal MITRE ATT&CK coverage page to identify technique-level gaps."
+            },
+            "name": "text-detections-recommendations"
+          }
+        ]
+      },
+      "conditionalVisibility": {
+        "parameterName": "selectedTab",
+        "comparison": "isEqualTo",
+        "value": "detections"
+      },
+      "name": "group-detections"
+    }
+  ],
+  "fallbackResourceIds": [],
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
