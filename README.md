@@ -29,22 +29,53 @@ Whether you are building a new Sentinel deployment, validating an existing one a
 
 ## Coverage at a Glance
 
-| # | ACSC Priority Log Category | Microsoft 1P Coverage | Coverage Level |
-|---|---|---|---|
-| 1 | EDR Logs | Full — Microsoft Defender for Endpoint | ██████████ 100% |
-| 2 | Network Device Logs | Partial — Azure Firewall, NSG, WAF native; 3P connectors for Palo Alto, Fortinet, Cisco, Check Point, Zscaler | ████████░░ 80% |
-| 3 | Domain Controller Logs | Full — Windows Security Events + Defender for Identity | ██████████ 100% |
-| 4 | AD & Domain Service Security | Full — Windows Security Events + Defender for Identity | ██████████ 100% |
-| 5 | Windows Endpoint Logs | Full — Windows Security Events + MDE | ██████████ 100% |
-| 6 | Virtualisation System Logs | Partial — Azure Activity (Azure VMs); 3P connectors for VMware, Citrix | ██████░░░░ 60% |
-| 7 | OT Logging | Good — Microsoft Defender for IoT; 3P connectors for Claroty, Nozomi, Dragos | ████████░░ 75% |
-| 8 | Cloud Platform Logging | Full — Azure/M365 native; Good — AWS, GCP connectors | █████████░ 95% |
-| 9 | Container Logs | Full — AKS native + Defender for Containers | ██████████ 100% |
-| 10 | Database Logs | Good — Azure SQL/PaaS native; 3P for Oracle, MongoDB, on-prem PostgreSQL | ████████░░ 80% |
-| 11 | MDM | Good — Intune + MDE Mobile; 3P for Jamf, Zimperium, Lookout | ████████░░ 80% |
-| 12 | DNS Server Logs | Full — Windows Server DNS + MDE endpoint DNS | ██████████ 100% |
-| 13 | Linux Endpoint Logs | Good — Syslog via AMA + MDE Linux + Sysmon for Linux | ████████░░ 85% |
-| 14 | Apple macOS Endpoint Logs | Good — MDE macOS; 3P for NXLog BSM, Jamf Protect | ███████░░░ 75% |
+Coverage percentages are **data-driven** using the formula:
+
+> **Coverage % = (Full + Partial × 0.5) / Total sub-requirements × 100**
+
+Across all 14 categories: **113 total ACSC sub-requirements** — 88 fully covered, 25 partially covered, 0 gaps — giving a **weighted average of 89%**. See the [Partial Coverage Notes](#partial-coverage-notes) table below for every sub-requirement that scored Partial and the specific action needed to close the gap.
+
+| # | ACSC Priority Log Category | Microsoft 1P Coverage | Full | Partial | Total | Coverage |
+|---|---|---|:---:|:---:|:---:|---|
+| 1 | EDR Logs | Full — Microsoft Defender for Endpoint | — | — | — | █████████░ 93% |
+| 2 | Network Device Logs | Partial — Azure Firewall, NSG, WAF native; 3P for Palo Alto, Fortinet, Cisco, Check Point, Zscaler | — | — | — | █████████░ 88% |
+| 3 | Domain Controller Logs | Full — Windows Security Events + Defender for Identity | — | — | — | █████████░ 89% |
+| 4 | AD & Domain Service Security | Full — Windows Security Events + Defender for Identity | — | — | — | ██████████ 100% |
+| 5 | Windows Endpoint Logs | Full — Windows Security Events + MDE | — | — | — | ██████████ 100% |
+| 6 | Virtualisation System Logs | Partial — Azure Activity (Azure VMs); 3P for VMware, Citrix | — | — | — | ███████░░░ 70% |
+| 7 | OT Logging | Good — Microsoft Defender for IoT; 3P for Claroty, Nozomi, Dragos | — | — | — | ████████░░ 75% |
+| 8 | Cloud Platform Logging | Full — Azure/M365 native; Good — AWS, GCP connectors | — | — | — | █████████░ 97% |
+| 9 | Container Logs | Full — AKS native + Defender for Containers | — | — | — | ██████████ 100% |
+| 10 | Database Logs | Good — Azure SQL/PaaS native; 3P for Oracle, MongoDB, on-prem PostgreSQL | — | — | — | ████████░░ 80% |
+| 11 | MDM | Good — Intune + MDE Mobile; 3P for Jamf, Zimperium, Lookout | — | — | — | █████████░ 92% |
+| 12 | DNS Server Logs | Full — Windows Server DNS + MDE endpoint DNS | — | — | — | ██████████ 100% |
+| 13 | Linux Endpoint Logs | Good — Syslog via AMA + MDE Linux + Sysmon for Linux | — | — | — | ████████░░ 83% |
+| 14 | Apple macOS Endpoint Logs | Good — MDE macOS; 3P for NXLog BSM, Jamf Protect | — | — | — | ██████░░░░ 67% |
+| | **Overall** | **89% weighted average · 113 sub-requirements · 88 full · 25 partial · 0 gaps** | | | | **█████████░ 89%** |
+
+---
+
+## Partial Coverage Notes
+
+The table below lists every sub-requirement that scored **Partial** and the specific action needed to reach Full coverage. These are the targeted gaps to close.
+
+| # | Category | Sub-requirement | Why Partial | Action to Close Gap |
+|---|---|---|---|---|
+| 1 | EDR Logs | Browser History (typed URLs) | MDE captures `BrowserLaunchedToOpenUrl` events only; full browser history requires investigation package or web content filtering | Enable Defender for Endpoint web content filtering; use Live Response investigation package for forensic browser history |
+| 1 | EDR Logs | LNK files, Shellbags, ShimCache, BAM | LNK creation in `DeviceFileEvents`; deep forensic artefacts (ShimCache, BAM, Shellbags) not in streaming telemetry | Collect via Live Response investigation package or deploy a third-party forensic collector (e.g. Velociraptor) |
+| 2 | Network Device Logs | Core/border router & switch logs | Generic Syslog ingestion; no structured parsing or dedicated solution for most router/switch vendors | Deploy a vendor-specific Syslog parser DCR or use a third-party network observability tool (e.g. Corelight, Gigamon) |
+| 2 | Network Device Logs | NetFlow (ingress/egress per subnet) | NetFlow is not natively ingested by Sentinel; requires a collector appliance | Deploy a NetFlow collector (e.g. Corelight, nProbe) that converts to Syslog/CEF or a custom table via DCR |
+| 3 | Domain Controller Logs | AD FS event IDs (307, 510, 1007, 1200, 1202) | Requires custom Windows Event Forwarding from AD FS servers; not collected by default AMA DCR | Deploy AMA on AD FS servers with a custom DCR targeting the AD FS admin/audit event logs |
+| 3 | Domain Controller Logs | LSASS protection events (3033, 3063) | Limited OOTB detection; requires LSA protection mode enabled on DCs | Enable LSA protection (RunAsPPL) via GPO; add a custom DCR to forward System log events 3033/3063 |
+| 3 | Domain Controller Logs | Unsigned LDAP bind events (2889) | Requires Directory Services diagnostic logging enabled on each DC | Enable LDAP interface events logging (`HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\NTDS\Diagnostics`) and forward via AMA |
+| 6 | Virtualisation | Non-Azure hypervisors (VMware, Citrix) | Requires 3P Content Hub solution and Syslog/CEF configuration on each hypervisor | Install `VMWareESXi` and/or `Citrix ADC`/`Citrix Analytics for Security` Content Hub solutions; configure Syslog forwarding |
+| 8 | Cloud Platform Logging | Entra Connect sync events (611, 650–657) | `AADProvisioningLogs` ingested natively but Entra Connect server Application/Security event IDs require AMA on the Connect server | Deploy AMA on the Entra Connect server with a DCR capturing Application and Security logs targeting event IDs 611, 650–657 |
+| 11 | MDM | Wi-Fi / cellular connection event detail | Intune provides device compliance and policy status but does not stream per-connection Wi-Fi/cellular telemetry | Use MDE Network Protection events (`DeviceNetworkEvents`) or a dedicated MDM/UEM solution with network telemetry (e.g. Jamf) |
+| 13 | Linux Endpoint Logs | File access denied events | auditd SYSCALL denied events require auditd rules deployed and forwarding via rsyslog/AMA; not enabled by default | Deploy auditd rules for file access monitoring and configure AMA to forward the audit log |
+| 13 | Linux Endpoint Logs | Recon tool detection (ncat, nmap, netcat) | Relies on Syslog process names; MDE on Linux provides richer coverage but agent deployment is required | Deploy MDE for Linux agent to get `DeviceProcessEvents` and `DeviceNetworkEvents` for all Linux hosts |
+| 14 | macOS Endpoint Logs | Keychain access events | Keychain events are not captured by MDE telemetry | Requires Apple BSM audit trail via NXLog BSM macOS connector or a custom `auditpipe` collector |
+| 14 | macOS Endpoint Logs | Volume mount/unmount events | MDE `ActionType` coverage for volume events is limited on macOS | Deploy NXLog BSM macOS connector for full BSM event coverage including volume events |
+| 14 | macOS Endpoint Logs | Full CLI (Terminal) audit trail | MDE captures process creation but does not provide shell history equivalent | Deploy NXLog BSM macOS for OpenBSM audit trail covering all Terminal command execution |
 
 ---
 
@@ -52,7 +83,7 @@ Whether you are building a new Sentinel deployment, validating an existing one a
 
 ### 1. Identify your priority gaps
 
-Start with the coverage table above. Microsoft's first-party (1P) solutions deliver full or near-full coverage for the highest-priority categories (EDR, Domain Controllers, Cloud Platform). Categories 6, 7, and 14 require either third-party connectors or additional custom data collection rules (DCRs).
+Start with the coverage table above. Microsoft's first-party (1P) solutions deliver full or near-full coverage for the highest-priority categories (EDR, Domain Controllers, Cloud Platform). Categories 6 (Virtualisation) and 14 (macOS) have the most third-party dependencies. Consult the [Partial Coverage Notes](#partial-coverage-notes) table to find the exact sub-requirements still requiring action.
 
 ### 2. Deploy the right data connectors
 
